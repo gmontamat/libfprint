@@ -382,7 +382,11 @@ fp_device_finalize (GObject *object)
 
   g_clear_pointer (&priv->device_id, g_free);
   g_clear_pointer (&priv->device_name, g_free);
-  g_clear_object (&priv->usb_device);
+
+  if (priv->type == FP_DEVICE_TYPE_USB)
+    g_clear_object (&priv->usb_device);
+  else if (priv->type == FP_DEVICE_TYPE_VIRTUAL)
+    g_clear_pointer (&priv->virtual_env, g_free);
 
   G_OBJECT_CLASS (fp_device_parent_class)->finalize (object);
 }
