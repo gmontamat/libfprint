@@ -1,12 +1,15 @@
 libfprint_sources = [
     'fp-context.c',
-    'fp-device.c',
     'fp-image.c',
     'fp-print.c',
-    'fp-image-device.c',
 ]
 
 libfprint_private_sources = [
+    # Device sources are actually a mix of private and public stuff
+    # TODO: split into fp-(image-)device and fpi-(image-)device
+    'fp-device.c',
+    'fp-image-device.c',
+
     'fpi-assembling.c',
     'fpi-ssm.c',
     'fpi-usb-transfer.c',
