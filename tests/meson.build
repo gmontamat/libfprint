@@ -57,13 +57,15 @@ if 'virtual_image' in drivers
         'fp-context',
         'fp-device',
         'fpi-device',
+        'fpi-assembling',
     ]
 
+    # FIXME: cairo_dep only needed for fpi-assembling and it should be optional
     foreach test_name: unit_tests
         basename = 'test-' + test_name
         test_exe = executable(basename,
             sources: basename + '.c',
-            dependencies: libfprint_dep,
+            dependencies: [libfprint_dep, cairo_dep],
             include_directories: [
                 root_inc,
                 include_directories('../libfprint'),

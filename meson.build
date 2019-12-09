@@ -81,6 +81,7 @@ glib_dep = dependency('glib-2.0', version: '>=' + glib_min_version)
 gio_dep = dependency('gio-unix-2.0', version: '>=' + glib_min_version)
 gusb_dep = dependency('gusb', version: '>= 0.3.0')
 mathlib_dep = cc.find_library('m', required: false)
+cairo_dep = dependency('cairo', required: false)
 
 # Drivers
 drivers = get_option('drivers').split(',')
