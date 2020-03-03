@@ -1,40 +1,79 @@
-image: fedora:rawhide
-stages:
-  - build
-  - test
-
 variables:
-  DEPENDENCIES: libusb1-devel glib2-devel nss-devel pixman-devel systemd meson gtk-doc
-                gcc gcc-c++ glibc-devel libX11-devel libXv-devel gtk3-devel flatpak-builder
+  FEDORA_TAG: rawhide
+  FEDORA_VERSION: rawhide
+  FEDORA_IMAGE: "$CI_REGISTRY/libfprint/$CI_PROJECT_NAME/fedora/$FEDORA_VERSION:$FEDORA_TAG"
   BUNDLE: "org.freedesktop.libfprint.Demo.flatpak"
   LAST_ABI_BREAK: "056ea541ddc97f5806cffbd99a12dc87e4da3546"
 
+include:
+  - project: 'wayland/ci-templates'
+    ref: master
+    file: '/templates/fedora.yml'
+
+stages:
+  - check-source
+  - build
+  - test
+  - flatpack
+
+image: "$FEDORA_IMAGE"
+
 .build_one_driver_template: &build_one_driver
   script:
-    - dnf update -y --nogpgcheck && dnf install -y --nogpgcheck $DEPENDENCIES
     # Build with a driver that doesn't need imaging, or nss
-    - meson -Ddrivers=elan . _build
+    - meson --werror -Ddrivers=$driver . _build
     - ninja -C _build
     - rm -rf _build/
 
 .build_template: &build
   script:
-    - dnf update -y --nogpgcheck && dnf install -y --nogpgcheck $DEPENDENCIES
     # And build with everything
-    - meson -Ddrivers=all . _build
+    - meson --werror -Ddrivers=all . _build
     - ninja -C _build
     - ninja -C _build install
 
 .build_template: &check_abi
   script:
-    - dnf update -y --nogpgcheck && dnf install -y --nogpgcheck $DEPENDENCIES doxygen libabigail git
     - ./.ci/check-abi ${LAST_ABI_BREAK} $(git rev-parse HEAD)
 
 build:
   stage: build
+  except:
+    variables:
+      - $CI_PIPELINE_SOURCE == "schedule"
+  variables:
+    driver: virtual_image
   <<: *build_one_driver
   <<: *build
-  <<: *check_abi
+#  <<: *check_abi
+
+test:
+  stage: test
+  except:
+    variables:
+      - $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - meson --werror -Ddrivers=all . _build
+    - ninja -C _build
+    - meson test -C _build --verbose --no-stdsplit
+
+test_valgrind:
+  stage: test
+  except:
+    variables:
+      - $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - meson -Ddrivers=all . _build
+    - ninja -C _build
+    - meson test -C _build --verbose --no-stdsplit --setup=valgrind
+
+test_indent:
+  stage: check-source
+  except:
+    variables:
+      - $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - scripts/uncrustify.sh --check
 
 .flatpak_script_template: &flatpak_script
     script:
@@ -59,9 +98,12 @@ build:
     <<: *flatpak_script
     <<: *flatpak_artifacts
 
-flatpak master:
-    image: registry.gitlab.gnome.org/gnome/gnome-runtime-images/gnome:master
-    stage: test
+.flatpak_master_template: &flatpak_master
+    image: registry.gitlab.gnome.org/gnome/gnome-runtime-images/gnome:3.32
+    stage: flatpack
+    except:
+      variables:
+        - $CI_PIPELINE_SOURCE == "schedule"
     variables:
         MANIFEST_PATH: "demo/org.freedesktop.libfprint.Demo.json"
         # From demo/org.freedesktop.libfprint.Demo.json
@@ -69,3 +111,51 @@ flatpak master:
         FLATPAK_MODULE: "libfprint"
         DBUS_ID: "org.freedesktop.libfprint.Demo"
     <<: *flatpak
+
+flatpak-auto master:
+    <<: *flatpak_master
+    when: always
+    only:
+      - tags
+      - master
+
+flatpak-manual master:
+    <<: *flatpak_master
+    when: manual
+    except:
+      - tags
+      - master
+
+# CONTAINERS creation stage
+container_fedora_build:
+  extends: .fedora@container-build
+  only:
+    variables:
+      - $CI_PIPELINE_SOURCE == "schedule" && $CRON_TASK == "BUILD_CI_IMAGES"
+  variables:
+    GIT_STRATEGY: none # no need to pull the whole tree for rebuilding the image
+    # a list of packages to install
+    FEDORA_RPMS:
+      doxygen
+      flatpak-builder
+      gcc
+      gcc-c++
+      git
+      glib2-devel
+      glibc-devel
+      gobject-introspection-devel
+      gtk-doc
+      gtk3-devel
+      libabigail
+      libgusb-devel
+      libX11-devel
+      libXv-devel
+      meson
+      nss-devel
+      pixman-devel
+      python3-cairo
+      python3-gobject
+      systemd
+      umockdev
+      uncrustify
+      valgrind
