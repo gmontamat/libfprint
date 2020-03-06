@@ -22,6 +22,7 @@
 
 #include "drivers_api.h"
 #include <fp_internal.h>
+#include <fpi-ssm.h>
 
 #include <errno.h>
 #include <nss.h>
@@ -1181,7 +1182,7 @@ static void start_handshake_ssm(struct fp_img_dev *idev, struct fpi_ssm *parent_
 	tlshd->parent_ssm = parent_ssm;
 	tlshd->vinit = vinit;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), handshake_ssm, TLS_HANDSHAKE_STATE_LAST, tlshd);
+	ssm = fpi_ssm_new_full(FP_DEV(idev), handshake_ssm, TLS_HANDSHAKE_STATE_LAST, tlshd);
 	fpi_ssm_start(ssm, handshake_ssm_cb);
 }
 
@@ -1424,7 +1425,7 @@ static int dev_open(struct fp_img_dev *idev, unsigned long driver_data)
 	usb_operation(libusb_claim_interface(udev, 0), idev);
 
 	/* Clearing previous device state */
-	ssm = fpi_ssm_new(dev, init_ssm, INIT_STATE_LAST, g_new0(struct vfs_init_t, 1));
+	ssm = fpi_ssm_new_full(dev, init_ssm, INIT_STATE_LAST, g_new0(struct vfs_init_t, 1));
 	fpi_ssm_start(ssm, dev_open_callback);
 
 	return 0;
@@ -1602,7 +1603,7 @@ static void start_finger_image_download_subsm(struct fp_img_dev *idev, struct fp
 	imgdown = g_new0(struct image_download_t, 1);
 	imgdown->parent_ssm = parent_ssm;
 
-	ssm = fpi_ssm_new(FP_DEV(idev),
+	ssm = fpi_ssm_new_full(FP_DEV(idev),
 			  finger_image_download_ssm,
 			  IMAGE_DOWNLOAD_STATE_LAST,
 			  imgdown);
@@ -1674,7 +1675,7 @@ static void start_scan_error_handler_ssm(struct fp_img_dev *idev, struct fpi_ssm
 	error_data->error_code = error_code;
 	error_data->parent_ssm = parent_ssm;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), scan_error_handler_ssm,
+	ssm = fpi_ssm_new_full(FP_DEV(idev), scan_error_handler_ssm,
 			  SCAN_ERROR_STATE_LAST, error_data);
 	fpi_ssm_start(ssm, scan_error_handler_callback);
 }
@@ -1787,7 +1788,7 @@ static void start_finger_scan(struct fp_img_dev *idev)
 	vdev->buffer = g_malloc(VFS_USB_BUFFER_SIZE);
 	vdev->buffer_length = 0;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), finger_scan_ssm, SCAN_STATE_LAST, NULL);
+	ssm = fpi_ssm_new(FP_DEV(idev), finger_scan_ssm, SCAN_STATE_LAST);
 	fpi_ssm_start(ssm, finger_scan_callback);
 }
 
@@ -1813,8 +1814,7 @@ static void activate_device_interrupt_callback(struct fp_img_dev *idev, int stat
 				struct fpi_ssm *child_ssm;
 				child_ssm = fpi_ssm_new(dev,
 							finger_scan_ssm,
-							SCAN_STATE_LAST,
-							NULL);
+							SCAN_STATE_LAST);
 				fpi_ssm_start_subsm(ssm, child_ssm);
 			} else {
 				fpi_ssm_next_state(ssm);
@@ -1905,26 +1905,26 @@ static int dev_activate(struct fp_img_dev *idev)
 	vdev->buffer = g_malloc(VFS_USB_BUFFER_SIZE);
 	vdev->buffer_length = 0;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), activate_ssm, ACTIVATE_STATE_LAST, NULL);
+	ssm = fpi_ssm_new(FP_DEV(idev), activate_ssm, ACTIVATE_STATE_LAST);
 	fpi_ssm_start(ssm, dev_activate_callback);
 
 	return 0;
 }
 
-static int dev_change_state(struct fp_img_dev *idev, enum fp_imgdev_state state)
+static int dev_change_state(struct fp_img_dev *idev, enum FpImageDeviceState state)
 {
 	switch(state) {
-		case IMGDEV_STATE_INACTIVE:
-			printf("State change: IMGDEV_STATE_INACTIVE\n");
+		case FP_IMAGE_DEVICE_STATE_INACTIVE:
+			printf("State change: FP_IMAGE_DEVICE_STATE_INACTIVE\n");
 			break;
-		case IMGDEV_STATE_AWAIT_FINGER_ON:
-			printf("State change: IMGDEV_STATE_AWAIT_FINGER_ON\n");
+		case FP_IMAGE_DEVICE_STATE_AWAIT_FINGER_ON:
+			printf("State change: FP_IMAGE_DEVICE_STATE_AWAIT_FINGER_ON\n");
 			break;
-		case IMGDEV_STATE_CAPTURE:
-			printf("State change: IMGDEV_STATE_CAPTURE\n");
+		case FP_IMAGE_DEVICE_STATE_CAPTURE:
+			printf("State change: FP_IMAGE_DEVICE_STATE_CAPTURE\n");
 			break;
-		case IMGDEV_STATE_AWAIT_FINGER_OFF:
-			printf("State change: IMGDEV_STATE_AWAIT_FINGER_OFF\n");
+		case FP_IMAGE_DEVICE_STATE_AWAIT_FINGER_OFF:
+			printf("State change: FP_IMAGE_DEVICE_STATE_AWAIT_FINGER_OFF\n");
 			break;
 	}
 
@@ -2003,7 +2003,7 @@ static void dev_deactivate(struct fp_img_dev *idev)
 	vdev->buffer = g_malloc(VFS_USB_BUFFER_SIZE);
 	vdev->buffer_length = 0;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), deactivate_ssm, DEACTIVATE_STATE_LAST, NULL);
+	ssm = fpi_ssm_new(FP_DEV(idev), deactivate_ssm, DEACTIVATE_STATE_LAST);
 	fpi_ssm_start(ssm, dev_deactivate_callback);
 }
 
@@ -2020,10 +2020,10 @@ static void reactivate_ssm(struct fpi_ssm *ssm, struct fp_dev *dev, void *data)
 			fpi_timeout_add(100, timeout_fpi_ssm_next_state, dev, ssm);
 		break;
 	case REACTIVATE_STATE_DEACTIVATE:
-		child_ssm = fpi_ssm_new(FP_DEV(idev), deactivate_ssm, DEACTIVATE_STATE_LAST, NULL);
+		child_ssm = fpi_ssm_new(FP_DEV(idev), deactivate_ssm, DEACTIVATE_STATE_LAST);
 		break;
 	case REACTIVATE_STATE_ACTIVATE:
-		child_ssm = fpi_ssm_new(FP_DEV(idev), activate_ssm, ACTIVATE_STATE_LAST, NULL);
+		child_ssm = fpi_ssm_new(FP_DEV(idev), activate_ssm, ACTIVATE_STATE_LAST);
 		break;
 	default:
 		fp_err("Unknown reactivate state");
@@ -2039,7 +2039,7 @@ static void start_reactivate_subsm(struct fp_img_dev *idev, struct fpi_ssm *pare
 {
 	struct fpi_ssm *ssm;
 
-	ssm = fpi_ssm_new(FP_DEV(idev), reactivate_ssm, REACTIVATE_STATE_LAST, NULL);
+	ssm = fpi_ssm_new(FP_DEV(idev), reactivate_ssm, REACTIVATE_STATE_LAST);
 	fpi_ssm_start_subsm(parent_ssm, ssm);
 }
 
